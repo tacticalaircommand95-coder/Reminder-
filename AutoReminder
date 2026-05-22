@@ -1,0 +1,50 @@
+import discord
+from discord.ext import commands, tasks
+import json
+from datetime import datetime, timedelta
+import aiohttp
+
+# Bot setup
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# In-memory reminder storage (use database for production)
+reminders = []
+
+@bot.event
+async def on_ready():
+    print(f"{bot.user} has connected to Discord!")
+    check_reminders.start()
+
+@commands.command(name="remind")
+async def set_reminder(ctx, time_minutes: int, *, message: str):
+    """Set a reminder that triggers after X minutes"""
+    reminder_time = datetime.utcnow() + timedelta(minutes=time_minutes)
+    reminders.append({
+        "user_id": ctx.author.id,
+        "channel_id": ctx.channel.id,
+        "message": message,
+        "time": reminder_time
+    })
+    await ctx.send(f"✅ Reminder set for {time_minutes} minutes from now!")
+
+@tasks.loop(minutes=1)
+async def check_reminders():
+    """Check and trigger reminders"""
+    current_time = datetime.utcnow()
+    triggered = []
+    
+    for reminder in reminders:
+        if current_time >= reminder["time"]:
+            channel = bot.get_channel(reminder["channel_id"])
+            user = bot.get_user(reminder["user_id"])
+            if channel:
+                await channel.send(f"🔔 Reminder for {user.mention}: {reminder['message']}")
+            triggered.append(reminder)
+    
+    # Remove triggered reminders
+    for reminder in triggered:
+        reminders.remove(reminder)
+
+bot.run("YOUR_TOKEN_HERE")
